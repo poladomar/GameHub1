@@ -1,0 +1,22 @@
+name: Build and smoke test
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet build
+      - run: |
+          dotnet run --no-build --urls http://127.0.0.1:5000 > /tmp/gamehub.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:5000/health && break; sleep 1; done
+          curl -fsS http://127.0.0.1:5000/api/games | grep 'Orbital Drift'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5000/api/library)" = 401
+          curl -fsS -H 'X-GameHub: 1' -H 'Content-Type: application/json' -d '{"email":"test@example.com","password":"samplepass123"}' http://127.0.0.1:5000/api/register
+          curl -fsS -c /tmp/cookies -H 'X-GameHub: 1' -H 'Content-Type: application/json' -d '{"email":"test@example.com","password":"samplepass123"}' http://127.0.0.1:5000/api/login
+          curl -fsS -b /tmp/cookies -H 'X-GameHub: 1' -X POST http://127.0.0.1:5000/api/library/1
+          curl -fsS -b /tmp/cookies http://127.0.0.1:5000/api/library | grep 'Orbital Drift'
